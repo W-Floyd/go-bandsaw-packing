@@ -2,9 +2,10 @@ package packing
 
 import (
 	"fmt"
+	"sort"
 )
 
-var Verbose = true
+var Verbose = false
 
 type Rectangle struct {
 	Width  int
@@ -24,6 +25,41 @@ type PlacedRectangle struct { // doubles as a boundary
 type Solution struct {
 	Remainder []Rectangle
 	Placed    []PlacedRectangle
+}
+
+func areaUsed(solution Solution) (area int) {
+	for _, r := range solution.Placed {
+		area += r.Rectangle.Width * r.Rectangle.Height
+	}
+	return
+}
+
+func FilteredPack(boundaries []PlacedRectangle, rectangles []Rectangle, allowRotation bool, currentSolution Solution, offset Position) (output []Solution) {
+
+	allSolutions := Pack(boundaries, rectangles, allowRotation, currentSolution, offset)
+
+	options := map[int]Solution{}
+
+	for _, s := range allSolutions {
+		options[areaUsed(s)] = s
+	}
+
+	keys := make([]int, len(options))
+
+	i := 0
+	for k := range options {
+		keys[i] = k
+		i++
+	}
+
+	sort.Sort(sort.Reverse(sort.IntSlice(keys)))
+
+	for _, a := range keys {
+		output = append(output, options[a])
+	}
+
+	return output
+
 }
 
 func Pack(boundaries []PlacedRectangle, rectangles []Rectangle, allowRotation bool, currentSolution Solution, offset Position) (solutions []Solution) {
@@ -109,8 +145,8 @@ func Pack(boundaries []PlacedRectangle, rectangles []Rectangle, allowRotation bo
 				if checkRectangleFit(r, b.Rectangle) {
 					newSolution := currentSolution
 					Announce("Rectangle Option Fit")
-					placeRectangle(offset, r, &newSolution)
-					boundaryOptionSets := provideBoundaryOptions(b, r, offset)
+					placeRectangle(b.Position, r, &newSolution)
+					boundaryOptionSets := provideBoundaryOptions(b, r, b.Position)
 					VarInfo("newSolution", newSolution)
 					VarInfo("dR", dR)
 					VarInfo("boundaryOptionSets", boundaryOptionSets)
@@ -135,6 +171,8 @@ func Pack(boundaries []PlacedRectangle, rectangles []Rectangle, allowRotation bo
 
 	if len(validRectangles) == 0 {
 		solutions = append(solutions, currentSolution)
+		Announce("Final Solution")
+		VarInfo("currentSolution", currentSolution)
 	}
 
 	Announce("End Pack")
@@ -151,8 +189,8 @@ func rotate(rectangle Rectangle) (output Rectangle) {
 }
 
 func placeRectangle(offset Position, rectangle Rectangle, currentSolution *Solution) {
-	fmt.Println("Placing: ", rectangle)
-	fmt.Println("Position: ", offset)
+	Info("Placing: ", rectangle)
+	Info("Position: ", offset)
 
 	(*currentSolution).Placed = append((*currentSolution).Placed, PlacedRectangle{Rectangle: rectangle, Position: offset})
 }
