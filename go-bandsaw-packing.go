@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-var verbose = true
+var Verbose = true
 
 type Rectangle struct {
 	Width  int
@@ -28,25 +28,25 @@ type Solution struct {
 
 func Pack(boundaries []PlacedRectangle, rectangles []Rectangle, allowRotation bool, currentSolution Solution, offset Position) (solutions []Solution) {
 
-	announce("Pack")
+	Announce("Pack")
 
-	varInfo("boundaries", boundaries)
-	varInfo("rectangles", rectangles)
-	varInfo("allowRotation", allowRotation)
-	varInfo("currentSolution", currentSolution)
-	varInfo("offset", offset)
+	VarInfo("boundaries", boundaries)
+	VarInfo("rectangles", rectangles)
+	VarInfo("allowRotation", allowRotation)
+	VarInfo("currentSolution", currentSolution)
+	VarInfo("offset", offset)
 
 	validRectangles, oversizedRectangles := cullRectangles(boundaries, rectangles, allowRotation)
 
-	info("")
-	varInfo("validRectangles", validRectangles)
-	varInfo("oversizedRectangles", oversizedRectangles)
+	Info("")
+	VarInfo("validRectangles", validRectangles)
+	VarInfo("oversizedRectangles", oversizedRectangles)
 
 	currentSolution.Remainder = append(currentSolution.Remainder, oversizedRectangles...)
 
-	varInfo("currentSolution", currentSolution)
+	VarInfo("currentSolution", currentSolution)
 
-	announce("Boundry Range")
+	Announce("Boundry Range")
 
 	for bID, b := range boundaries {
 
@@ -63,12 +63,12 @@ func Pack(boundaries []PlacedRectangle, rectangles []Rectangle, allowRotation bo
 		}
 		dB = dB[:k]
 
-		announce("Boundary Instance")
-		varInfo("index", bID)
-		varInfo("boundary", b)
-		varInfo("Boundaries Left", dB)
+		Announce("Boundary Instance")
+		VarInfo("index", bID)
+		VarInfo("boundary", b)
+		VarInfo("Boundaries Left", dB)
 
-		announce("Rectangle Range")
+		Announce("Rectangle Range")
 
 		for rID, r := range validRectangles {
 
@@ -85,11 +85,11 @@ func Pack(boundaries []PlacedRectangle, rectangles []Rectangle, allowRotation bo
 			}
 			dR = dR[:k]
 
-			announce("Rectangle Instance")
-			varInfo("index", rID)
-			varInfo("rectangle ID", rID)
-			varInfo("rectangle", r)
-			varInfo("Rectangles Left", dR)
+			Announce("Rectangle Instance")
+			VarInfo("index", rID)
+			VarInfo("rectangle ID", rID)
+			VarInfo("rectangle", r)
+			VarInfo("Rectangles Left", dR)
 
 			var rOptions []Rectangle
 
@@ -99,24 +99,45 @@ func Pack(boundaries []PlacedRectangle, rectangles []Rectangle, allowRotation bo
 				rOptions = append(rOptions, rotate(r))
 			}
 
-			varInfo("rOptions", rOptions)
+			VarInfo("rOptions", rOptions)
 
-			announce("Rectangle Option Range")
+			Announce("Rectangle Option Range")
 
 			for _, r := range rOptions {
-				announce("Rectangle Option Instance")
+				Announce("Rectangle Option Instance")
+				VarInfo("r", r)
 				if checkRectangleFit(r, b.Rectangle) {
 					newSolution := currentSolution
-					announce("Rectangle Option Fit")
+					Announce("Rectangle Option Fit")
 					placeRectangle(offset, r, &newSolution)
+					boundaryOptionSets := provideBoundaryOptions(b, r, offset)
+					VarInfo("newSolution", newSolution)
+					VarInfo("dR", dR)
+					VarInfo("boundaryOptionSets", boundaryOptionSets)
 
+					for _, option := range boundaryOptionSets {
+						for _, b := range dB {
+							option = append(option, b)
+						}
+						VarInfo("option", option)
+						newSolutions := Pack(option, dR, allowRotation, newSolution, b.Position)
+						solutions = append(solutions, newSolutions...)
+					}
+
+				} else {
+					Info("   Did not fit.")
+					VarInfo("b", b)
 				}
 			}
 
 		}
 	}
 
-	announce("End Pack")
+	if len(validRectangles) == 0 {
+		solutions = append(solutions, currentSolution)
+	}
+
+	Announce("End Pack")
 
 	return solutions
 
@@ -138,25 +159,25 @@ func placeRectangle(offset Position, rectangle Rectangle, currentSolution *Solut
 
 func cullRectangles(boundaries []PlacedRectangle, rectangles []Rectangle, allowRotation bool) (validRectangles []Rectangle, oversizedRectangles []Rectangle) {
 
-	announce("Culling")
-	varInfo("rectangles", rectangles)
-	varInfo("boundaries", boundaries)
-	info("")
+	Announce("Culling")
+	VarInfo("rectangles", rectangles)
+	VarInfo("boundaries", boundaries)
+	Info("")
 
 	for _, r := range rectangles {
 		willFit := false
-		varInfo("Rectangle", r)
+		VarInfo("Rectangle", r)
 		for _, b := range boundaries {
 			if checkRectangleFit(r, b.Rectangle) {
-				info("   Fits Normal")
-				info("")
+				Info("   Fits Normal")
+				Info("")
 				willFit = true
 				break
 			}
 			if allowRotation {
 				if checkRectangleFit(rotate(r), b.Rectangle) {
-					info("   Fits Rotated")
-					info("")
+					Info("   Fits Rotated")
+					Info("")
 					willFit = true
 					break
 				}
@@ -170,11 +191,11 @@ func cullRectangles(boundaries []PlacedRectangle, rectangles []Rectangle, allowR
 		if willFit {
 			validRectangles = append(validRectangles, r)
 		} else {
-			info("   Does Not fit")
+			Info("   Does Not fit")
 			oversizedRectangles = append(oversizedRectangles, r)
 		}
 	}
-	announce("End Culling")
+	Announce("End Culling")
 
 	return
 
@@ -189,23 +210,116 @@ func checkRectangleFit(rectangle Rectangle, boundary Rectangle) bool {
 
 }
 
-func varInfo(title string, a ...interface{}) {
-	if verbose {
+func VarInfo(title string, a ...interface{}) {
+	if Verbose {
 		fmt.Println(" " + title)
 		fmt.Printf("    %+v\n", a...)
 	}
 }
 
-func announce(a ...interface{}) {
-	if verbose {
+func Announce(a ...interface{}) {
+	if Verbose {
 		fmt.Println("")
 		fmt.Println(a...)
 	}
 }
 
-func info(a ...interface{}) {
-	if verbose {
+func Info(a ...interface{}) {
+	if Verbose {
 		fmt.Print(" ")
 		fmt.Println(a...)
 	}
+}
+
+func provideBoundaryOptions(b PlacedRectangle, r Rectangle, offset Position) (boundaryOptionSets [][]PlacedRectangle) {
+
+	if b.Rectangle.Height == r.Height && b.Rectangle.Width == r.Width {
+
+	} else if b.Rectangle.Width == r.Width {
+
+		boundaryOptionSets = [][]PlacedRectangle{
+			[]PlacedRectangle{
+				PlacedRectangle{
+					Rectangle: Rectangle{
+						Width:  b.Rectangle.Width,
+						Height: b.Rectangle.Height - r.Height,
+					},
+					Position: Position{
+						X: offset.X,
+						Y: r.Height + offset.Y,
+					},
+				},
+			},
+		}
+
+	} else if b.Rectangle.Height == r.Height {
+
+		boundaryOptionSets = [][]PlacedRectangle{
+			[]PlacedRectangle{
+				PlacedRectangle{
+					Rectangle: Rectangle{
+						Height: b.Rectangle.Height,
+						Width:  b.Rectangle.Width - r.Width,
+					},
+					Position: Position{
+						Y: offset.Y,
+						X: r.Width + offset.X,
+					},
+				},
+			},
+		}
+
+	} else {
+
+		boundaryOptionSets = [][]PlacedRectangle{
+			[]PlacedRectangle{
+				PlacedRectangle{
+					Rectangle: Rectangle{
+						Width:  b.Rectangle.Width - r.Width,
+						Height: b.Rectangle.Height,
+					},
+					Position: Position{
+						X: r.Width + offset.X,
+						Y: offset.Y,
+					},
+				},
+				PlacedRectangle{
+					Rectangle: Rectangle{
+						Width:  r.Width,
+						Height: b.Rectangle.Height - r.Height,
+					},
+					Position: Position{
+						X: offset.X,
+						Y: r.Height + offset.Y,
+					},
+				},
+			},
+
+			[]PlacedRectangle{
+				PlacedRectangle{
+					Rectangle: Rectangle{
+						Width:  b.Rectangle.Width - r.Width,
+						Height: r.Height,
+					},
+					Position: Position{
+						X: r.Width + offset.X,
+						Y: offset.Y,
+					},
+				},
+				PlacedRectangle{
+					Rectangle: Rectangle{
+						Width:  b.Rectangle.Width,
+						Height: b.Rectangle.Height - r.Height,
+					},
+					Position: Position{
+						X: offset.X,
+						Y: r.Height + offset.Y,
+					},
+				},
+			},
+		}
+
+	}
+
+	return
 }
