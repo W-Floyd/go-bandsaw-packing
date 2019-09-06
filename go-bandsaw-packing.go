@@ -2,14 +2,30 @@ package packing
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 )
 
-var Verbose = false
+var iteration = 0
 
+var Verbose = false
+var forceVerbose = false
+
+var globalState []State
+
+type State struct {
+	Boundaries []Rectangle
+	Rectangles []RectangleQuantity
+	Iteration  int
+}
 type Rectangle struct {
 	Width  int
 	Height int
+}
+
+type RectangleQuantity struct {
+	Rectangle Rectangle
+	Quantity  int
 }
 
 type Position struct {
@@ -23,7 +39,7 @@ type PlacedRectangle struct { // doubles as a boundary
 }
 
 type Solution struct {
-	Remainder []Rectangle
+	Remainder []RectangleQuantity
 	Placed    []PlacedRectangle
 }
 
@@ -34,7 +50,7 @@ func areaUsed(solution Solution) (area int) {
 	return
 }
 
-func FilteredPack(boundaries []PlacedRectangle, rectangles []Rectangle, allowRotation bool, currentSolution Solution, offset Position) (output []Solution) {
+func FilteredPack(boundaries []PlacedRectangle, rectangles []RectangleQuantity, allowRotation bool, currentSolution Solution, offset Position) (output []Solution) {
 
 	allSolutions := Pack(boundaries, rectangles, allowRotation, currentSolution, offset)
 
@@ -62,120 +78,208 @@ func FilteredPack(boundaries []PlacedRectangle, rectangles []Rectangle, allowRot
 
 }
 
-func Pack(boundaries []PlacedRectangle, rectangles []Rectangle, allowRotation bool, currentSolution Solution, offset Position) (solutions []Solution) {
+func normalizeRectangles(rectangles []PlacedRectangle, allowRotation bool) (output []Rectangle) {
+	for _, r := range rectangles {
+		if r.Rectangle.Height > r.Rectangle.Width && allowRotation {
+			output = append(output, Rectangle{Width: r.Rectangle.Height, Height: r.Rectangle.Width})
+		} else {
+			output = append(output, r.Rectangle)
+		}
+	}
 
-	Announce("Pack")
+	// sort each Parent in the parents slice by Id
+	sort.Slice(output, func(i, j int) bool {
+		if output[i].Width == output[j].Width {
+			return output[i].Height < output[j].Height
+		}
+		return output[i].Width < output[j].Width
+	})
 
-	VarInfo("boundaries", boundaries)
-	VarInfo("rectangles", rectangles)
-	VarInfo("allowRotation", allowRotation)
+	return output
+}
+
+func stateDuplicate(givenState State) bool {
+
+	for _, state := range globalState {
+
+		if reflect.DeepEqual(state.Boundaries, givenState.Boundaries) && reflect.DeepEqual(state.Rectangles, givenState.Rectangles) {
+			Verbose = true
+			Announce("Equal")
+			VarInfo("state", state)
+			VarInfo("givenState", givenState)
+			Info("")
+			Verbose = false
+			return true
+		}
+	}
+	return false
+}
+
+func Pack(boundaries []PlacedRectangle, rectangles []RectangleQuantity, allowRotation bool, currentSolution Solution, offset Position) (solutions []Solution) {
+
+	currentState := State{
+		Rectangles: rectangles,
+		Boundaries: normalizeRectangles(boundaries, allowRotation),
+		Iteration:  iteration,
+	}
+
+	Verbose = true
+	Info("")
+	VarInfo("iteration", iteration)
+	VarInfo("currentState", currentState)
 	VarInfo("currentSolution", currentSolution)
-	VarInfo("offset", offset)
+
+	Verbose = false
+
+	iteration++
 
 	validRectangles, oversizedRectangles := cullRectangles(boundaries, rectangles, allowRotation)
 
-	Info("")
-	VarInfo("validRectangles", validRectangles)
-	VarInfo("oversizedRectangles", oversizedRectangles)
+	Verbose = true
 
-	currentSolution.Remainder = append(currentSolution.Remainder, oversizedRectangles...)
+	Info("foo")
 
-	VarInfo("currentSolution", currentSolution)
+	if len(validRectangles) == 0 || len(boundaries) == 0 {
+		solutions = append(solutions, currentSolution)
+		Announce("Final Solution")
+		VarInfo("currentSolution", currentSolution)
+		return solutions
+	}
 
-	Announce("Boundry Range")
+	Verbose = false
 
-	for bID, b := range boundaries {
+	skipPack := false
 
-		excluded := false
-		dB := make([]PlacedRectangle, len(boundaries))
-		k := 0
-		for _, n := range boundaries {
-			if n != b || excluded { // filter
-				dB[k] = n
-				k++
-			} else {
-				excluded = true
-			}
-		}
-		dB = dB[:k]
+	if stateDuplicate(currentState) {
+		skipPack = true
+	}
 
-		Announce("Boundary Instance")
-		VarInfo("index", bID)
-		VarInfo("boundary", b)
-		VarInfo("Boundaries Left", dB)
+	globalState = append(globalState, currentState)
 
-		Announce("Rectangle Range")
+	if skipPack {
+		Verbose = true
+		Announce("Skipping")
+		Verbose = false
 
-		for rID, r := range validRectangles {
+	} else {
+
+		Verbose = true
+		Announce("Pack")
+
+		VarInfo("boundaries", boundaries)
+		VarInfo("rectangles", rectangles)
+		VarInfo("allowRotation", allowRotation)
+		VarInfo("currentSolution", currentSolution)
+		Info("placed: ", len(currentSolution.Placed))
+		VarInfo("offset", offset)
+
+		Info("")
+		VarInfo("validRectangles", validRectangles)
+		VarInfo("oversizedRectangles", oversizedRectangles)
+
+		currentSolution.Remainder = append(currentSolution.Remainder, oversizedRectangles...)
+
+		VarInfo("currentSolution", currentSolution)
+
+		Announce("Boundry Range")
+
+		for bID, b := range boundaries {
 
 			excluded := false
-			dR := make([]Rectangle, len(validRectangles))
+			dB := make([]PlacedRectangle, len(boundaries))
 			k := 0
-			for _, n := range validRectangles {
-				if n != r || excluded { // filter
-					dR[k] = n
+			for _, n := range boundaries {
+				if n != b || excluded { // filter
+					dB[k] = n
 					k++
 				} else {
 					excluded = true
 				}
 			}
-			dR = dR[:k]
+			dB = dB[:k]
 
-			Announce("Rectangle Instance")
-			VarInfo("index", rID)
-			VarInfo("rectangle ID", rID)
-			VarInfo("rectangle", r)
-			VarInfo("Rectangles Left", dR)
+			Announce("Boundary Instance")
+			VarInfo("index", bID)
+			VarInfo("boundary", b)
+			VarInfo("Boundaries Left", dB)
 
-			var rOptions []Rectangle
+			Announce("Rectangle Range")
 
-			rOptions = append(rOptions, r)
+			for rID, r := range validRectangles {
 
-			if allowRotation {
-				rOptions = append(rOptions, rotate(r))
-			}
-
-			VarInfo("rOptions", rOptions)
-
-			Announce("Rectangle Option Range")
-
-			for _, r := range rOptions {
-				Announce("Rectangle Option Instance")
-				VarInfo("r", r)
-				if checkRectangleFit(r, b.Rectangle) {
-					newSolution := currentSolution
-					Announce("Rectangle Option Fit")
-					placeRectangle(b.Position, r, &newSolution)
-					boundaryOptionSets := provideBoundaryOptions(b, r, b.Position)
-					VarInfo("newSolution", newSolution)
-					VarInfo("dR", dR)
-					VarInfo("boundaryOptionSets", boundaryOptionSets)
-
-					for _, option := range boundaryOptionSets {
-						for _, b := range dB {
-							option = append(option, b)
-						}
-						VarInfo("option", option)
-						newSolutions := Pack(option, dR, allowRotation, newSolution, b.Position)
-						solutions = append(solutions, newSolutions...)
+				excluded := false
+				dR := make([]RectangleQuantity, len(validRectangles))
+				k := 0
+				for _, n := range validRectangles {
+					if n != r || excluded { // filter
+						dR[k] = n
+						k++
+					} else {
+						excluded = true
 					}
-
-				} else {
-					Info("   Did not fit.")
-					VarInfo("b", b)
 				}
+				dR = dR[:k]
+
+				if r.Quantity > 1 {
+					dR = append(dR, RectangleQuantity{Rectangle: r.Rectangle, Quantity: r.Quantity - 1})
+				}
+
+				Announce("Rectangle Instance")
+				VarInfo("index", rID)
+				VarInfo("rectangle ID", rID)
+				VarInfo("rectangle", r)
+				VarInfo("Rectangles Left", dR)
+
+				var rOptions []Rectangle
+
+				rOptions = append(rOptions, r.Rectangle)
+
+				if allowRotation && !reflect.DeepEqual(rotate(r.Rectangle), r.Rectangle) {
+					rOptions = append(rOptions, rotate(r.Rectangle))
+				}
+
+				VarInfo("rOptions", rOptions)
+
+				Announce("Rectangle Option Range")
+
+				for _, r := range rOptions {
+					Announce("Rectangle Option Instance")
+					VarInfo("r", r)
+
+					if checkRectangleFit(r, b.Rectangle) {
+						newSolution := currentSolution
+						Announce("Rectangle Option Fit")
+						placeRectangle(b.Position, r, &newSolution)
+						boundaryOptionSets := provideBoundaryOptions(b, r, b.Position)
+						VarInfo("newSolution", newSolution)
+						VarInfo("dR", dR)
+						VarInfo("boundaryOptionSets", boundaryOptionSets)
+						if len(boundaryOptionSets) == 0 {
+							boundaryOptionSets = append(boundaryOptionSets, dB)
+						}
+
+						for _, option := range boundaryOptionSets {
+							for _, b := range dB {
+								option = append(option, b)
+							}
+							VarInfo("option", option)
+							Verbose = false
+							newSolutions := Pack(option, dR, allowRotation, newSolution, b.Position)
+							solutions = append(solutions, newSolutions...)
+						}
+
+					} else {
+						Info("   Did not fit.")
+						VarInfo("b", b)
+					}
+				}
+
 			}
-
 		}
-	}
 
-	if len(validRectangles) == 0 {
-		solutions = append(solutions, currentSolution)
-		Announce("Final Solution")
-		VarInfo("currentSolution", currentSolution)
-	}
+		Announce("End Pack")
 
-	Announce("End Pack")
+	}
 
 	return solutions
 
@@ -195,35 +299,42 @@ func placeRectangle(offset Position, rectangle Rectangle, currentSolution *Solut
 	(*currentSolution).Placed = append((*currentSolution).Placed, PlacedRectangle{Rectangle: rectangle, Position: offset})
 }
 
-func cullRectangles(boundaries []PlacedRectangle, rectangles []Rectangle, allowRotation bool) (validRectangles []Rectangle, oversizedRectangles []Rectangle) {
+func cullRectangles(boundaries []PlacedRectangle, rectangles []RectangleQuantity, allowRotation bool) (validRectangles []RectangleQuantity, oversizedRectangles []RectangleQuantity) {
 
 	Announce("Culling")
 	VarInfo("rectangles", rectangles)
 	VarInfo("boundaries", boundaries)
 	Info("")
 
+	if len(boundaries) == 0 {
+		Info("   No Boundaries")
+		return []RectangleQuantity{}, rectangles
+	}
+
 	for _, r := range rectangles {
 		willFit := false
 		VarInfo("Rectangle", r)
 		for _, b := range boundaries {
-			if checkRectangleFit(r, b.Rectangle) {
-				Info("   Fits Normal")
-				Info("")
-				willFit = true
-				break
-			}
-			if allowRotation {
-				if checkRectangleFit(rotate(r), b.Rectangle) {
-					Info("   Fits Rotated")
+			if r.Quantity > 0 {
+				if checkRectangleFit(r.Rectangle, b.Rectangle) {
+					Info("   Fits Normal")
 					Info("")
 					willFit = true
 					break
 				}
-			}
-			if willFit {
+				if allowRotation {
+					if checkRectangleFit(rotate(r.Rectangle), b.Rectangle) {
+						Info("   Fits Rotated")
+						Info("")
+						willFit = true
+						break
+					}
+				}
+				if willFit {
 
-				willFit = true
-				break
+					willFit = true
+					break
+				}
 			}
 		}
 		if willFit {
@@ -249,21 +360,21 @@ func checkRectangleFit(rectangle Rectangle, boundary Rectangle) bool {
 }
 
 func VarInfo(title string, a ...interface{}) {
-	if Verbose {
+	if Verbose && forceVerbose {
 		fmt.Println(" " + title)
 		fmt.Printf("    %+v\n", a...)
 	}
 }
 
 func Announce(a ...interface{}) {
-	if Verbose {
+	if Verbose && forceVerbose {
 		fmt.Println("")
 		fmt.Println(a...)
 	}
 }
 
 func Info(a ...interface{}) {
-	if Verbose {
+	if Verbose && forceVerbose {
 		fmt.Print(" ")
 		fmt.Println(a...)
 	}
